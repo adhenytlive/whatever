@@ -1,14 +1,14 @@
-name: Live Streaming Final (Stage 4)
+name: Live Streaming Final (Stable)
 
 on:
   workflow_dispatch:
   # schedule:
-  #   - cron: "16 10 * * 1"
+  #   - cron: "16 10 * * 1"   # aktifkan nanti kalau sudah yakin
 
 jobs:
   live-stream:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 180   # 3 jam
 
     steps:
       - name: Install FFmpeg
@@ -16,24 +16,34 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      - name: Download video & intro
+      - name: Download video (toleran, anti error)
         run: |
+          echo "Download listA"
           for i in {01..15}; do
-            wget -q https://github.com/whateverliveyt/whatever/releases/download/v1.0/listA_$i.mp4
+            wget https://github.com/whateverliveyt/whatever/releases/download/v1.0/listA_$i.mp4 \
+            || echo "listA_$i.mp4 tidak ada"
           done
+
+          echo "Download listB"
           for i in {01..10}; do
-            wget -q https://github.com/whateverliveyt/whatever/releases/download/v1.0/listB_$i.mp4
+            wget https://github.com/whateverliveyt/whatever/releases/download/v1.0/listB_$i.mp4 \
+            || echo "listB_$i.mp4 tidak ada"
           done
-          wget -q https://github.com/whateverliveyt/whatever/releases/download/v1.0/intro.mp4
+
+          echo "Download intro (opsional)"
+          wget https://github.com/whateverliveyt/whatever/releases/download/v1.0/intro.mp4 \
+          || echo "intro.mp4 tidak ada, lanjut tanpa intro"
 
       - name: Rotasi harian 2 keluar - 2 masuk
         run: |
-          KELUAR=$(ls listA_*.mp4 | shuf -n 2)
-          MASUK=$(ls listB_*.mp4 | shuf -n 2)
+          A_FILES=$(ls listA_*.mp4 2>/dev/null | shuf -n 2)
+          B_FILES=$(ls listB_*.mp4 2>/dev/null | shuf -n 2)
 
           i=1
-          for A in $KELUAR; do
-            B=$(echo "$MASUK" | sed -n "${i}p")
+          for A in $A_FILES; do
+            B=$(echo "$B_FILES" | sed -n "${i}p")
+
+            [ -z "$B" ] && continue
 
             mv "$A" "out_$i.mp4"
             mv "$B" "in_$i.mp4"
@@ -44,11 +54,18 @@ jobs:
             i=$((i+1))
           done
 
-      - name: Shuffle & buat playlist + intro
+          echo "ROTASI SELESAI"
+
+      - name: Buat playlist (acak + intro opsional)
         run: |
           ls listA_*.mp4 | shuf > urutan.txt
+
           > playlist.txt
-          echo "file '$PWD/intro.mp4'" >> playlist.txt
+
+          if [ -f intro.mp4 ]; then
+            echo "file '$PWD/intro.mp4'" >> playlist.txt
+          fi
+
           while read f; do
             echo "file '$PWD/$f'" >> playlist.txt
           done < urutan.txt
