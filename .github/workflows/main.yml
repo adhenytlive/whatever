@@ -1,15 +1,31 @@
-name: Cron Test
+name: Video Check Stage 1
 
 on:
   workflow_dispatch:
-  schedule:
-
 
 jobs:
-  test-cron:
+  check-video:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Tampilkan waktu
+      - name: Download video dari GitHub Releases
         run: |
-          echo "Cron jalan"
-          date -u
+          echo "Download listA (LIVE)"
+          for i in {01..15}; do
+            wget -q https://github.com/whateverliveyt/whatever/releases/download/v1.0/listA_$i.mp4
+          done
+
+          echo "Download listB (CADANGAN)"
+          for i in {01..10}; do
+            wget -q https://github.com/whateverliveyt/whatever/releases/download/v1.0/listB_$i.mp4
+          done
+
+      - name: Cek file yang terdownload
+        run: |
+          echo "=== FILE LISTA ==="
+          ls listA_*.mp4 | wc -l
+          ls listA_*.mp4
+
+          echo "=== FILE LISTB ==="
+          ls listB_*.mp4 | wc -l
+          ls listB_*.mp4
