@@ -8,7 +8,7 @@ on:
 jobs:
   live-stream:
     runs-on: ubuntu-latest
-    timeout-minutes: 180   # 3 jam
+    timeout-minutes: 180 # 3 jam
 
     steps:
       - name: Install FFmpeg
@@ -86,7 +86,7 @@ jobs:
         env:
           STREAM_KEY: ${{ secrets.STREAM_KEY }}
         run: |
-          GAIN=$(shuf -i -2,2 -n 1)
+          GAIN=$(awk 'BEGIN{srand(); print int(rand()*5)-2}')
           echo "Audio gain: ${GAIN}dB"
 
           ffmpeg -re -f concat -safe 0 -stream_loop -1 -i playlist.txt \
