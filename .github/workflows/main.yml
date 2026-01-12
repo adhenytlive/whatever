@@ -1,14 +1,12 @@
-name: Live Streaming Final (Stable)
+name: TEST – Rotating Content Pool (Dry Run)
 
 on:
   workflow_dispatch:
-  # schedule:
-  #   - cron: "16 10 * * 1"   # aktifkan nanti kalau sudah yakin
 
 jobs:
-  live-stream:
+  test-rotation:
     runs-on: ubuntu-latest
-    timeout-minutes: 180 # 3 jam
+    timeout-minutes: 10   # pendek, hanya untuk test
 
     steps:
       - name: Install FFmpeg
@@ -16,82 +14,90 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      - name: Download video (toleran, anti error)
+      - name: Download videos (tolerant)
         run: |
-          echo "Download listA"
-          for i in {01..15}; do
+          for i in {01..20}; do
             wget https://github.com/whateverliveyt/whatever/releases/download/v1.0/listA_$i.mp4 \
-            || echo "listA_$i.mp4 tidak ada"
+            || echo "listA_$i missing"
           done
 
-          echo "Download listB"
-          for i in {01..10}; do
+          for i in {01..15}; do
             wget https://github.com/whateverliveyt/whatever/releases/download/v1.0/listB_$i.mp4 \
-            || echo "listB_$i.mp4 tidak ada"
+            || echo "listB_$i missing"
           done
 
-          echo "Download intro (opsional)"
           wget https://github.com/whateverliveyt/whatever/releases/download/v1.0/intro.mp4 \
-          || echo "intro.mp4 tidak ada, lanjut tanpa intro"
+          || echo "intro missing"
 
-      - name: Rotasi harian 2 keluar - 2 masuk (SAFE)
+      - name: Init state files
         run: |
-          set +e
+          ls listA_*.mp4 > active.txt
+          ls listB_*.mp4 > reserve.txt
+          : > recycle.txt
 
-          A_ALL=$(ls listA_*.mp4 2>/dev/null)
-          B_ALL=$(ls listB_*.mp4 2>/dev/null)
+          echo "=== ACTIVE INIT ==="
+          cat active.txt
+          echo "=== RESERVE INIT ==="
+          cat reserve.txt
 
-          if [ -z "$A_ALL" ] || [ -z "$B_ALL" ]; then
-            echo "listA atau listB kosong, skip rotasi"
-            exit 0
-          fi
-
-          KELUAR=$(echo "$A_ALL" | shuf -n 2)
-          MASUK=$(echo "$B_ALL" | shuf -n 2)
-
-          i=1
-          for A in $KELUAR; do
-            B=$(echo "$MASUK" | sed -n "${i}p")
-            [ -z "$B" ] && continue
-
-            mv "$A" "out_$i.mp4"
-            mv "$B" "in_$i.mp4"
-
-            mv "in_$i.mp4" "$A"
-            mv "out_$i.mp4" "$B"
-
-            i=$((i+1))
-          done
-
-          echo "ROTASI SELESAI"
-
-      - name: Buat playlist (acak + intro opsional)
-        run: |
-          ls listA_*.mp4 | shuf > urutan.txt
-
-          > playlist.txt
-
-          if [ -f intro.mp4 ]; then
-            echo "file '$PWD/intro.mp4'" >> playlist.txt
-          fi
-
-          while read f; do
-            echo "file '$PWD/$f'" >> playlist.txt
-          done < urutan.txt
-
-          echo "=== PLAYLIST ==="
-          cat playlist.txt
-
-      - name: Mulai Streaming (loop + audio random ringan)
-        env:
-          STREAM_KEY: ${{ secrets.STREAM_KEY }}
+      - name: Dry Run Play (Soft Loop max 2x)
         run: |
           GAIN=$(awk 'BEGIN{srand(); print int(rand()*5)-2}')
           echo "Audio gain: ${GAIN}dB"
 
-          ffmpeg -re -f concat -safe 0 -stream_loop -1 -i playlist.txt \
-            -filter:a "volume=${GAIN}dB" \
-            -c:v libx264 -preset veryfast -maxrate 3000k -bufsize 6000k \
-            -pix_fmt yuv420p -g 50 \
-            -c:a aac -b:a 128k -ar 44100 \
-            -f flv "rtmp://a.rtmp.youtube.com/live2/$STREAM_KEY"
+          LOOP=1
+          MAX_LOOP=2
+
+          while [ $LOOP -le $MAX_LOOP ]; do
+            echo ""
+            echo "===== DRY PLAY LOOP $LOOP ====="
+
+            shuf active.txt > play_order.txt
+            : > playlist.txt
+
+            if [ -f intro.mp4 ] && [ $LOOP -eq 1 ]; then
+              echo "file '$PWD/intro.mp4'" >> playlist.txt
+            fi
+
+            while read f; do
+              echo "file '$PWD/$f'" >> playlist.txt
+            done < play_order.txt
+
+            echo "--- PLAYLIST LOOP $LOOP ---"
+            cat playlist.txt
+
+            ffmpeg -re -f concat -safe 0 -i playlist.txt \
+              -filter:a "volume=${GAIN}dB" \
+              -c:v libx264 -preset veryfast \
+              -c:a aac \
+              -f null -
+
+            LOOP=$((LOOP+1))
+          done
+
+      - name: Rotate AFTER dry run (1 out / 1 in)
+        run: |
+          OUT=$(shuf active.txt | head -n 1)
+          IN=$(shuf reserve.txt | head -n 1)
+
+          echo ""
+          echo "ROTATE OUT: $OUT"
+          echo "ROTATE IN : $IN"
+
+          grep -v "^$OUT$" active.txt > tmp && mv tmp active.txt
+          echo "$OUT" >> recycle.txt
+
+          grep -v "^$IN$" reserve.txt > tmp && mv tmp reserve.txt
+          echo "$IN" >> active.txt
+
+          if [ ! -s reserve.txt ]; then
+            echo "Reserve empty → refill from recycle"
+            cat recycle.txt > reserve.txt
+            : > recycle.txt
+          fi
+
+          echo ""
+          echo "=== ACTIVE (NEXT LIVE) ==="
+          cat active.txt
+          echo "=== RESERVE (NEXT LIVE) ==="
+          cat reserve.txt
