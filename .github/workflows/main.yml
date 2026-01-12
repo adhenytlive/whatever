@@ -86,7 +86,7 @@ jobs:
         env:
           STREAM_KEY: ${{ secrets.STREAM_KEY }}
         run: |
-          GAIN=$(shuf -i -2-2 -n 1)
+          GAIN=$(shuf -i -2,2 -n 1)
           echo "Audio gain: ${GAIN}dB"
 
           ffmpeg -re -f concat -safe 0 -stream_loop -1 -i playlist.txt \
