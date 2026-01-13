@@ -3,13 +3,13 @@ name: Live Streaming – Rotating Content Pool (Final Auto Duration)
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 10 * * 1"
-    - cron: "30 10 * * 2"
-    - cron: "30 9 * * 3"
-    - cron: "0 10 * * 4"
-    - cron: "0 11 * * 5"
-    - cron: "30 9 * * 6"
-    - cron: "30 10 * * 0"
+  #  - cron: "0 10 * * 1"
+  #  - cron: "30 10 * * 2"
+  #  - cron: "30 9 * * 3"
+  #  - cron: "0 10 * * 4"
+  #  - cron: "0 11 * * 5"
+  #  - cron: "30 9 * * 6"
+  #  - cron: "30 10 * * 0"
 
 jobs:
   live-stream:
