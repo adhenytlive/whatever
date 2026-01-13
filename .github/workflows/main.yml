@@ -1,4 +1,4 @@
-name: Whatever Quiz
+name: Live Streaming – Rotating Content Pool (Ultimate 2-2)
 
 on:
   workflow_dispatch:
@@ -11,24 +11,30 @@ jobs:
     timeout-minutes: 360 # FAILSAFE SAJA
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Install FFmpeg
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg bc
 
+      # ===============================
+      # DOWNLOAD VIDEO
+      # ===============================
       - name: Download videos (tolerant)
         run: |
           for i in {01..20}; do
-            wget https://github.com/whateverliveyt/whatever/releases/download/v1.0/listA_$i.mp4 \
+            wget -q https://github.com/whateverliveyt/whatever/releases/download/v1.0/listA_$i.mp4 \
             || echo "listA_$i missing"
           done
 
           for i in {01..15}; do
-            wget https://github.com/whateverliveyt/whatever/releases/download/v1.0/listB_$i.mp4 \
+            wget -q https://github.com/whateverliveyt/whatever/releases/download/v1.0/listB_$i.mp4 \
             || echo "listB_$i missing"
           done
 
-          wget https://github.com/whateverliveyt/whatever/releases/download/v1.0/intro.mp4 \
+          wget -q https://github.com/whateverliveyt/whatever/releases/download/v1.0/intro.mp4 \
           || echo "intro missing"
 
       # ===============================
@@ -43,32 +49,38 @@ jobs:
       - name: Init state if missing
         run: |
           if [ ! -f active.txt ]; then
+            echo "Init fresh state"
             ls listA_*.mp4 > active.txt
             ls listB_*.mp4 > reserve.txt
             : > recycle.txt
           fi
 
+          echo "ACTIVE:"
+          cat active.txt
+          echo "RESERVE:"
+          cat reserve.txt
+
       # ===============================
-      # HEALTH CHECK GUARD
+      # HEALTH CHECK
       # ===============================
       - name: Health check
         env:
           STREAM_KEY: ${{ secrets.STREAM_KEY }}
         run: |
           if [ -z "$STREAM_KEY" ]; then
-            echo "STREAM_KEY missing → abort"
+            echo "STREAM_KEY missing"
             exit 1
           fi
 
           if [ ! -s active.txt ]; then
-            echo "ACTIVE list empty → abort"
+            echo "ACTIVE empty"
             exit 1
           fi
 
       # ===============================
-      # ADAPTIVE SOFT LOOP
+      # ADAPTIVE LOOP + LIVE
       # ===============================
-      - name: Play live (adaptive loop + micro variation)
+      - name: Live streaming (adaptive + micro variation)
         env:
           STREAM_KEY: ${{ secrets.STREAM_KEY }}
         run: |
@@ -86,11 +98,13 @@ jobs:
           echo "Max loop: $MAX_LOOP"
 
           GAIN=$(awk 'BEGIN{srand(); print int(rand()*5)-2}')
-          BRIGHT=$(awk 'BEGIN{srand(); printf "%.2f", 1 + (rand()*0.02 - 0.01)}')
-          SAT=$(awk 'BEGIN{srand(); printf "%.2f", 1 + (rand()*0.02 - 0.01)}')
+          BRIGHT=$(awk 'BEGIN{srand(); printf "%.3f", (rand()*0.02 - 0.01)}')
+          SAT=$(awk 'BEGIN{srand(); printf "%.3f", 1 + (rand()*0.02 - 0.01)}')
 
           LOOP=1
           while [ $LOOP -le $MAX_LOOP ]; do
+            echo "PLAY LOOP $LOOP"
+
             shuf active.txt > play_order.txt
             : > playlist.txt
 
@@ -103,7 +117,7 @@ jobs:
             done < play_order.txt
 
             ffmpeg -re -f concat -safe 0 -i playlist.txt \
-              -filter_complex "volume=${GAIN}dB,eq=brightness=$(echo "$BRIGHT-1" | bc):saturation=$SAT" \
+              -filter_complex "volume=${GAIN}dB,eq=brightness=${BRIGHT}:saturation=${SAT}" \
               -c:v libx264 -preset veryfast -maxrate 3000k -bufsize 6000k \
               -pix_fmt yuv420p -g 50 \
               -c:a aac -b:a 128k -ar 44100 \
@@ -113,24 +127,36 @@ jobs:
           done
 
       # ===============================
-      # ROTATE & SAVE STATE
+      # ROTATION 2 OUT / 2 IN
       # ===============================
-      - name: Rotate & save state
+      - name: Rotate content (2 out / 2 in)
         run: |
-          OUT=$(shuf active.txt | head -n 1)
-          IN=$(shuf reserve.txt | head -n 1)
+          OUTS=$(shuf active.txt | head -n 2)
+          INS=$(shuf reserve.txt | head -n 2)
 
-          grep -v "^$OUT$" active.txt > tmp && mv tmp active.txt
-          echo "$OUT" >> recycle.txt
+          echo "OUT:"
+          echo "$OUTS"
+          echo "IN:"
+          echo "$INS"
 
-          grep -v "^$IN$" reserve.txt > tmp && mv tmp reserve.txt
-          echo "$IN" >> active.txt
+          for O in $OUTS; do
+            grep -v "^$O$" active.txt > tmp && mv tmp active.txt
+            echo "$O" >> recycle.txt
+          done
 
-          if [ ! -s reserve.txt ]; then
-            cat recycle.txt > reserve.txt
+          for I in $INS; do
+            grep -v "^$I$" reserve.txt > tmp && mv tmp reserve.txt
+            echo "$I" >> active.txt
+          done
+
+          if [ $(wc -l < reserve.txt) -lt 2 ]; then
+            cat recycle.txt >> reserve.txt
             : > recycle.txt
           fi
 
+      # ===============================
+      # SAVE STATE
+      # ===============================
       - name: Save state
         uses: actions/upload-artifact@v4
         with:
