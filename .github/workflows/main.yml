@@ -1,14 +1,12 @@
-name: Live Streaming – Rotating Content Pool (Ultimate Stable)
+name: TEST – Rotating Content Pool (DRY RUN)
 
 on:
   workflow_dispatch:
-  # schedule:
-  #   - cron: "0 10 * * *"
 
 jobs:
-  live-stream:
+  test-run:
     runs-on: ubuntu-latest
-    timeout-minutes: 360   # FAILSAFE SAJA
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -17,72 +15,50 @@ jobs:
       - name: Install FFmpeg
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg bc
+          sudo apt-get install -y ffmpeg bc wget
 
       # ===============================
-      # DOWNLOAD VIDEO
+      # AUTO-DETECT DOWNLOAD
       # ===============================
-      - name: Download videos
+      - name: Download videos (auto-detect)
         run: |
-          for i in {01..20}; do
-            wget -q https://github.com/whateverliveyt/whatever/releases/download/v1.0/listA_$i.mp4 || true
-          done
-          for i in {01..15}; do
-            wget -q https://github.com/whateverliveyt/whatever/releases/download/v1.0/listB_$i.mp4 || true
-          done
+          wget -q -r -np -nd -A "listA_*.mp4" \
+            https://github.com/whateverliveyt/whatever/releases/download/v1.0/ || true
+          wget -q -r -np -nd -A "listB_*.mp4" \
+            https://github.com/whateverliveyt/whatever/releases/download/v1.0/ || true
           wget -q https://github.com/whateverliveyt/whatever/releases/download/v1.0/intro.mp4 || true
 
       # ===============================
-      # LOAD STATE (AMAN RUN PERTAMA)
+      # INIT STATE
       # ===============================
-      - name: Load previous state (if any)
-        uses: actions/download-artifact@v4
-        with:
-          name: content-state
-        continue-on-error: true
-
-      - name: Init state if missing
+      - name: Init state
         run: |
-          if [ ! -f active.txt ]; then
-            echo "Init fresh state"
-            ls listA_*.mp4 > active.txt
-            ls listB_*.mp4 > reserve.txt
-            : > recycle.txt
-          fi
+          ls listA_*.mp4 > active.txt
+          ls listB_*.mp4 > reserve.txt
+          : > recycle.txt
+
+          echo "ACTIVE:"
+          cat active.txt
+          echo "RESERVE:"
+          cat reserve.txt
 
       # ===============================
-      # HEALTH CHECK (AMAN RUN PERTAMA)
+      # DRY STREAM TEST
       # ===============================
-      - name: Health check (safe)
-        env:
-          STREAM_KEY: ${{ secrets.STREAM_KEY }}
-        run: |
-          if [ -z "$STREAM_KEY" ]; then
-            echo "STREAM_KEY missing"
-            exit 1
-          fi
-
-          if [ ! -s active.txt ]; then
-            echo "ACTIVE empty, abort"
-            exit 1
-          fi
-
-      # ===============================
-      # LIVE STREAMING
-      # ===============================
-      - name: Live streaming
-        env:
-          STREAM_KEY: ${{ secrets.STREAM_KEY }}
+      - name: Dry run streaming (NO YOUTUBE)
         run: |
           COUNT=$(wc -l < active.txt)
 
-          if [ "$COUNT" -lt 6 ]; then
-            MAX_LOOP=3
-          elif [ "$COUNT" -lt 12 ]; then
+          if [ "$COUNT" -ge 15 ]; then
+            MAX_LOOP=1
+          elif [ "$COUNT" -ge 8 ]; then
             MAX_LOOP=2
           else
-            MAX_LOOP=1
+            MAX_LOOP=3
           fi
+
+          echo "Video count: $COUNT"
+          echo "Max loop   : $MAX_LOOP"
 
           GAIN=$(awk 'BEGIN{srand(); print int(rand()*5)-2}')
           BRIGHT=$(awk 'BEGIN{srand(); printf "%.3f", (rand()*0.02 - 0.01)}')
@@ -90,6 +66,8 @@ jobs:
 
           LOOP=1
           while [ $LOOP -le $MAX_LOOP ]; do
+            echo "===== DRY PLAY LOOP $LOOP ====="
+
             shuf active.txt > play_order.txt
             : > playlist.txt
 
@@ -101,48 +79,40 @@ jobs:
               echo "file '$PWD/$f'" >> playlist.txt
             done < play_order.txt
 
+            echo "--- PLAYLIST LOOP $LOOP ---"
+            cat playlist.txt
+
             ffmpeg -re -f concat -safe 0 -i playlist.txt \
               -filter:a "volume=${GAIN}dB" \
               -filter:v "eq=brightness=${BRIGHT}:saturation=${SAT}" \
-              -c:v libx264 -preset veryfast -maxrate 3000k -bufsize 6000k \
-              -pix_fmt yuv420p -g 50 \
-              -c:a aac -b:a 128k -ar 44100 \
-              -f flv "rtmp://a.rtmp.youtube.com/live2/$STREAM_KEY"
+              -t 20 \
+              -f null -
 
             LOOP=$((LOOP+1))
           done
 
       # ===============================
-      # ROTASI 2 OUT / 2 IN
+      # ROTATION TEST
       # ===============================
-      - name: Rotate content (2 out / 2 in)
+      - name: Rotation test (adaptive)
         run: |
-          OUTS=$(shuf active.txt | head -n 2)
-          INS=$(shuf reserve.txt | head -n 2)
+          COUNT=$(wc -l < active.txt)
 
-          for O in $OUTS; do
-            grep -v "^$O$" active.txt > tmp && mv tmp active.txt
-            echo "$O" >> recycle.txt
-          done
-
-          for I in $INS; do
-            grep -v "^$I$" reserve.txt > tmp && mv tmp reserve.txt
-            echo "$I" >> active.txt
-          done
-
-          if [ $(wc -l < reserve.txt) -lt 2 ]; then
-            cat recycle.txt >> reserve.txt
-            : > recycle.txt
+          if [ "$COUNT" -ge 12 ]; then
+            N=2
+          else
+            N=1
           fi
 
-      # ===============================
-      # SAVE STATE
-      # ===============================
-      - name: Save state
-        uses: actions/upload-artifact@v4
-        with:
-          name: content-state
-          path: |
-            active.txt
-            reserve.txt
-            recycle.txt
+          echo "Rotation mode: $N OUT / $N IN"
+
+          OUTS=$(shuf active.txt | head -n $N)
+          INS=$(shuf reserve.txt | head -n $N)
+
+          echo "OUT:"
+          echo "$OUTS"
+          echo "IN:"
+          echo "$INS"
+
+      - name: Test completed
+        run: echo "DRY RUN SUCCESS – SCRIPT LOGIC OK"
