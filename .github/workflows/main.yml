@@ -1,23 +1,20 @@
-name: Live Streaming – RABU - MINGGU
+name: Live Streaming – Rotating Content Pool (FINAL SAFE AUTO)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: {}
   schedule:
-  #  - cron: "30 9 * * 1"  # Senin 16:30 WIB
-  #  - cron: "0 10 * * 2"  # Selasa 17:00 WIB
-  #  - cron: "0 11 * * 3"  # Rabu 18:00 WIB
-  #  - cron: "45 1 * * 4" # Kamis 17:30 WIB
-  #  - cron: "0 10 * * 5"  # Jumat 17:00 WIB
-  #  - cron: "0 11 * * 6"  # Sabtu 18:00 WIB
-  #  - cron: "30 9 * * 0"  # Minggu 16:30 WIB
+    - cron: "29 9 * * 1" # SENIN 16:30 WIB
+    - cron: "59 9 * * 2" # SELASA 17:00 WIB
+    - cron: "59 10 * * 3" # RABU 18:00 WIB
+    - cron: "25 4 * * 4" # KAMIS 17:30 WIB
+    - cron: "59 9 * * 5" # JUMAT 17:00 WIB
+    - cron: "59 10 * * 6" # SABTU 18:00 WIB
+    - cron: "29 9 * * 0" # MINGGU 16:30 WIB
 
 jobs:
   live-stream:
     runs-on: ubuntu-latest
     timeout-minutes: 360
-
-    env:
-      STREAM_KEY: ${{ secrets.STREAM_KEY }}
 
     steps:
       - name: Checkout
