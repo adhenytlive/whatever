@@ -1,15 +1,15 @@
-name: Live Streaming – Rotating Content Pool (FINAL SAFE AUTO)
+name: Live Streaming – WhatEver Quiz
 
 on:
   workflow_dispatch: {}
   schedule:
-  #  - cron: "29 9 * * 1" # SENIN 16:30 WIB
-  #  - cron: "59 9 * * 2" # SELASA 17:00 WIB
-    - cron: "59 10 * * 3" # RABU 18:00 WIB
-    - cron: "34 5 * * *" # KAMIS 17:30 WIB
-  #  - cron: "59 9 * * 5" # JUMAT 17:00 WIB
-  #  - cron: "59 10 * * 6" # SABTU 18:00 WIB
-  #  - cron: "29 9 * * 0" # MINGGU 16:30 WIB
+    - cron: "0 10 * * 1" # SENIN 17:00 WIB 
+    - cron: "30 10 * * 2" # SELASA 17:30 WIB 
+    - cron: "30 9 * * 3" # RABU 16:30 WIB
+    - cron: "0 10 * * 4" # KAMIS 17:00 WIB
+    - cron: "0 11 * * 5" # JUMAT 18:00 WIB 
+    - cron: "30 9 * * 6" # SABTU 16:30 WIB 
+    - cron: "30 10 * * 0" # MINGGU 17:30 WIB 
 
 jobs:
   live-stream:
